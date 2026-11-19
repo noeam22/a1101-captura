@@ -146,9 +146,13 @@ async function conectar() {
 
 async function leer() {
   let chunks = [], total = 0, esperado = 0, tipo = null;
+  let nLect = 0, bytesTot = 0, t0 = Date.now();
+  log("leer(): empieza a leer del endpoint 2 (transferIn 2048)");
+  const dj = setInterval(() => { if (activo) log(`[diag] ${Math.round((Date.now() - t0) / 1000)} s · lecturas completadas=${nLect} · bytes=${bytesTot}${nLect === 0 ? " · transferIn sigue pendiente (sin datos)" : ""}`); else clearInterval(dj); }, 3000);
   while (activo) {
     let r;
-    try { r = await disp.transferIn(EP_IN, 2048); }
+    try { r = await disp.transferIn(EP_IN, 2048); nLect++; if (r.data) bytesTot += r.data.byteLength;
+      if (nLect <= 6) { const b = r.data ? Array.from(new Uint8Array(r.data.buffer, r.data.byteOffset, Math.min(16, r.data.byteLength))).map(x => x.toString(16).padStart(2, "0")).join(" ") : ""; log(`[diag] lectura ${nLect}: estado=${r.status} bytes=${r.data ? r.data.byteLength : 0} ${b}`); } }
     catch (e) { if (activo) { log(`transferIn falló: ${e.name}: ${e.message}`); estado("Se perdió la conexión con la cámara."); } break; }
     if (r.status === "stall") { try { await disp.clearHalt("in", EP_IN); } catch (_) {} continue; }
     if (r.status !== "ok" || !r.data || r.data.byteLength === 0) continue;
