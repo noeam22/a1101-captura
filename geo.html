@@ -1,0 +1,614 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Captura A1101 con ubicación</title>
+<style>
+  :root { color-scheme: light dark; --gap: 12px; }
+  * { box-sizing: border-box; }
+  body { margin: 0 auto; padding: 16px; max-width: 640px; font: 16px/1.4 system-ui, sans-serif; }
+  h1 { font-size: 1.2rem; margin: 0 0 8px; }
+  #estado { min-height: 2.8em; margin: 0 0 var(--gap); padding: 8px 10px; border-radius: 8px;
+            background: rgba(127,127,127,.15); }
+  .visor { width: 100%; aspect-ratio: 4 / 3; background: #000; border-radius: 8px; overflow: hidden;
+           display: flex; align-items: center; justify-content: center; margin-bottom: var(--gap); }
+  .visor img { max-width: 100%; max-height: 100%; display: block; }
+  .fila { display: flex; gap: var(--gap); margin-bottom: var(--gap); }
+  .fila label { flex: 1; display: flex; flex-direction: column; font-size: .85rem; gap: 4px; }
+  input { font: inherit; padding: 10px; border-radius: 8px; border: 1px solid rgba(127,127,127,.5);
+          background: transparent; color: inherit; width: 100%; }
+  button { font: inherit; min-height: 52px; padding: 0 16px; border-radius: 10px; border: 1px solid rgba(127,127,127,.5);
+           background: rgba(127,127,127,.15); color: inherit; flex: 1; }
+  button:disabled { opacity: .4; }
+  #btnFoto { min-height: 72px; font-size: 1.2rem; font-weight: 600; background: #1a7f37; color: #fff; border-color: #1a7f37; }
+  #btnFoto:disabled { background: rgba(127,127,127,.3); border-color: rgba(127,127,127,.3); }
+  #gps, #aviso { padding: 8px 10px; border-radius: 8px; background: rgba(127,127,127,.15); margin-bottom: var(--gap); min-height: 2.4em; }
+  #gps.ok { background: rgba(26,127,55,.25); }
+  #gps.mal { background: rgba(207,34,46,.25); }
+  .chk { display: flex; align-items: center; gap: 8px; font-size: .9rem; margin-bottom: var(--gap); }
+  .chk input { width: auto; }
+  #btnEnviarAuto { min-height: 64px; font-weight: 600; background: #0969da; color: #fff; border-color: #0969da; }
+  #btnEnviarAuto:disabled { background: rgba(127,127,127,.3); border-color: rgba(127,127,127,.3); color: inherit; }
+  ul#cola { list-style: none; margin: 0 0 var(--gap); padding: 0; }
+  ul#cola li { display: flex; gap: 10px; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(127,127,127,.25); font-size: .8rem; }
+  ul#cola img { width: 56px; height: 42px; object-fit: cover; border-radius: 4px; background: #000; }
+  ul#cola .ok { opacity: .55; }
+  h2 { font-size: 1rem; margin: 16px 0 6px; }
+  details { margin-top: var(--gap); }
+  pre { white-space: pre-wrap; word-break: break-word; font-size: .75rem; max-height: 260px; overflow: auto;
+        background: rgba(127,127,127,.12); padding: 8px; border-radius: 8px; }
+</style>
+</head>
+<body>
+<h1>Captura A1101 con ubicación (prueba)</h1>
+<div id="estado">Pulsa «Conectar cámara».</div>
+
+<div class="visor"><img id="vista" alt="Vista en vivo"></div>
+
+<div class="fila">
+  <label>Nombre de cámara <input id="cam" value="CAM01" autocapitalize="characters"></label>
+  <label>Etiqueta opcional <input id="etq" placeholder="ej. vid3" autocapitalize="none"></label>
+</div>
+
+<div id="gps">Ubicación: sin activar.</div>
+<div class="fila"><button id="btnGPS">Activar ubicación</button></div>
+<label class="chk"><input type="checkbox" id="sinGps"> Permitir fotos sin ubicación</label>
+
+<div class="fila"><button id="btnFoto" disabled>FOTO</button></div>
+<div id="aviso">Las fotos se añaden a la lista de abajo; no se guardan solas.</div>
+
+<h2>Fotos hechas (<span id="nCola">0</span>)</h2>
+<ul id="cola"></ul>
+<div class="fila"><button id="btnEnviarAuto" disabled>Enviar por correo</button></div>
+<div class="fila">
+  <button id="btnEnviar" disabled>Enviar con mi app de correo (manual)</button>
+  <button id="btnGuardar" disabled>Guardar en el móvil</button>
+</div>
+<div class="fila"><button id="btnVaciar" disabled>Vaciar lista</button></div>
+
+<details id="cfg">
+  <summary>Configurar envío automático (una sola vez)</summary>
+  <div class="fila" style="margin-top:8px"><label>Dirección del script de Google (acaba en /exec)
+    <input id="urlScript" inputmode="url" autocapitalize="none" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec"></label></div>
+  <div class="fila"><label>Clave
+    <input id="clave" type="password" autocomplete="off" placeholder="la misma que pusiste en el script"></label></div>
+  <div class="fila">
+    <button id="btnCfgGuardar">Guardar en este móvil</button>
+    <button id="btnCfgProbar">Probar conexión</button>
+  </div>
+  <p style="font-size:.8rem;opacity:.75;margin:0">La dirección y la clave se guardan solo en este móvil, no en el repositorio.</p>
+</details>
+<p style="font-size:.8rem;opacity:.75;margin:0 0 var(--gap)">La lista solo vive mientras esta página está abierta: si la cierras, se pierde.</p>
+
+<div class="fila">
+  <button id="btnConectar">Conectar cámara</button>
+  <button id="btnDesconectar" disabled>Desconectar</button>
+</div>
+
+<details open>
+  <summary>Registro (cópialo y mándamelo si algo falla)</summary>
+  <pre id="log"></pre>
+  <div class="fila">
+    <button id="btnCopiar">Copiar registro</button>
+    <button id="btnReiniciar" disabled>Reiniciar flujo</button>
+  </div>
+</details>
+
+<script>
+"use strict";
+const VID = 0x2886, PIDS = [0x8060, 0x8061];        // Seeed SenseCAP A1101
+const MAGIC_JPEG = 0x2B2D2B2D, MAGIC_TEXTO = 0x0F100E12;
+const IFACE = 2, EP_IN = 2;                          // igual que agro_capture_v2.py
+
+let disp = null, activo = false, ultimoJpeg = null, frames = 0, fotos = 0, ultimoDato = 0;
+let urlVista = null, wake = null, textosLogueados = 0;
+let ultimosBytes = null, pos = null, gpsId = null;
+const cola = [];
+let enviando = false;
+const LOTE_AUTO = 25;                               // fotos por correo automático (igual que MAX_FOTOS del script)
+const MAX_COMPARTIR = 10;                           // Chrome comparte como máximo 10 archivos de una vez
+const usados = new Set();
+const $ = id => document.getElementById(id);
+const hex = n => "0x" + n.toString(16).padStart(4, "0");
+const dormir = ms => new Promise(r => setTimeout(r, ms));
+
+function log(m) {
+  const t = new Date().toLocaleTimeString();
+  const el = $("log");
+  el.textContent += `[${t}] ${m}\n`;
+  el.scrollTop = el.scrollHeight;
+}
+function estado(m) { $("estado").textContent = m; }
+function botones() {
+  $("btnConectar").disabled = activo;
+  $("btnDesconectar").disabled = !activo;
+  $("btnFoto").disabled = !activo || !ultimoJpeg || !(posValida() || $("sinGps").checked);
+  $("btnReiniciar").disabled = !activo;
+  const pend = cola.filter(i => !i.pasada).length;
+  $("btnEnviar").disabled = pend === 0;
+  $("btnEnviarAuto").disabled = pend === 0 || enviando || !cfgListo();
+  $("btnEnviarAuto").textContent = enviando ? "Enviando…" : (pend ? `Enviar por correo (${pend} pendientes)` : "Enviar por correo");
+  $("btnGuardar").disabled = cola.length === 0;
+  $("btnVaciar").disabled = cola.length === 0;
+}
+
+function describir() {
+  const c = disp.configuration;
+  if (!c) { log("Sin configuración activa"); return; }
+  log(`Configuración ${c.configurationValue}: ${c.interfaces.length} interfaces`);
+  for (const i of c.interfaces) for (const a of i.alternates) {
+    const eps = a.endpoints.map(e => `${e.endpointNumber}${e.direction === "in" ? "IN" : "OUT"}/${e.type}/${e.packetSize}`).join(" ");
+    log(`  interfaz ${i.interfaceNumber} alt ${a.alternateSetting} clase 0x${a.interfaceClass.toString(16)} reclamada=${i.claimed}: ${eps}`);
+  }
+}
+
+// Orden de variantes: la primera es la que usa el script de Python (lectura de control, clase, dispositivo).
+async function control(valor) {
+  const variantes = [
+    ["IN/clase/dispositivo", () => disp.controlTransferIn({ requestType: "class", recipient: "device", request: 0x22, value: valor, index: 2 }, 2048)],
+    ["OUT/clase/interfaz",   () => disp.controlTransferOut({ requestType: "class", recipient: "interface", request: 0x22, value: valor, index: 2 })],
+    ["OUT/clase/dispositivo",() => disp.controlTransferOut({ requestType: "class", recipient: "device", request: 0x22, value: valor, index: 2 })],
+    ["IN/clase/interfaz",    () => disp.controlTransferIn({ requestType: "class", recipient: "interface", request: 0x22, value: valor, index: 2 }, 2048)],
+  ];
+  for (const [nombre, f] of variantes) {
+    try {
+      const r = await f();
+      log(`control 0x22 valor=${valor} correcto (${nombre}), estado=${r.status}`);
+      return true;
+    } catch (e) { log(`control 0x22 valor=${valor} falló (${nombre}): ${e.message}`); }
+  }
+  return false;
+}
+
+async function conectar() {
+  if (!("usb" in navigator)) {
+    estado("Este navegador no tiene WebUSB.");
+    log(`WebUSB NO disponible. isSecureContext=${window.isSecureContext}. Hace falta Chrome y una dirección https://`);
+    return;
+  }
+  try {
+    const previos = (await navigator.usb.getDevices()).filter(d => d.vendorId === VID && PIDS.includes(d.productId));
+    disp = previos.length ? previos[0] : await navigator.usb.requestDevice({ filters: PIDS.map(p => ({ vendorId: VID, productId: p })) });
+  } catch (e) { log(`No se eligió dispositivo: ${e.message}`); estado("No se eligió ninguna cámara."); return; }
+
+  log(`Dispositivo: ${hex(disp.vendorId)}:${hex(disp.productId)} ${disp.productName || ""} serie=${disp.serialNumber || "-"}`);
+  try {
+    await disp.open();
+    log("open() correcto");
+    if (disp.configuration === null) { await disp.selectConfiguration(1); log("selectConfiguration(1) correcto"); }
+    describir();
+    await disp.claimInterface(IFACE);
+    log(`claimInterface(${IFACE}) correcto`);
+    try { await disp.selectAlternateInterface(IFACE, 0); log("selectAlternateInterface(2,0) correcto"); }
+    catch (e) { log(`selectAlternateInterface falló (se sigue): ${e.message}`); }
+    if (!(await control(1))) { estado("La cámara no aceptó la orden de inicio. Mira el registro."); await cerrar(); return; }
+  } catch (e) {
+    log(`ERROR al conectar: ${e.name}: ${e.message}`);
+    estado("No se pudo conectar. Mira el registro.");
+    await cerrar();
+    return;
+  }
+  activo = true; frames = 0; ultimoDato = Date.now(); textosLogueados = 0;
+  try { wake = await navigator.wakeLock.request("screen"); } catch (_) {}
+  estado("Conectada. Esperando imagen…");
+  botones();
+  leer();
+}
+
+async function leer() {
+  let chunks = [], total = 0, esperado = 0, tipo = null;
+  let nLect = 0, bytesTot = 0, t0 = Date.now();
+  log("leer(): empieza a leer del endpoint 2 (transferIn 2048)");
+  const dj = setInterval(() => { if (activo) log(`[diag] ${Math.round((Date.now() - t0) / 1000)} s · lecturas completadas=${nLect} · bytes=${bytesTot}${nLect === 0 ? " · transferIn sigue pendiente (sin datos)" : ""}`); else clearInterval(dj); }, 3000);
+  while (activo) {
+    let r;
+    try { r = await disp.transferIn(EP_IN, 2048); nLect++; if (r.data) bytesTot += r.data.byteLength;
+      if (nLect <= 6) { const b = r.data ? Array.from(new Uint8Array(r.data.buffer, r.data.byteOffset, Math.min(16, r.data.byteLength))).map(x => x.toString(16).padStart(2, "0")).join(" ") : ""; log(`[diag] lectura ${nLect}: estado=${r.status} bytes=${r.data ? r.data.byteLength : 0} ${b}`); } }
+    catch (e) { if (activo) { log(`transferIn falló: ${e.name}: ${e.message}`); estado("Se perdió la conexión con la cámara."); } break; }
+    if (r.status === "stall") { try { await disp.clearHalt("in", EP_IN); } catch (_) {} continue; }
+    if (r.status !== "ok" || !r.data || r.data.byteLength === 0) continue;
+    ultimoDato = Date.now();
+    const d = new Uint8Array(r.data.buffer, r.data.byteOffset, r.data.byteLength);
+
+    if (d.length === 8) {
+      const dv = new DataView(d.buffer, d.byteOffset, 8);
+      const magic = dv.getUint32(0, false);
+      if (magic === MAGIC_JPEG || magic === MAGIC_TEXTO) {
+        tipo = magic === MAGIC_JPEG ? "jpeg" : "texto";
+        esperado = dv.getUint32(4, false);
+        chunks = []; total = 0;
+        continue;
+      }
+    }
+    chunks.push(d.slice()); total += d.length;
+    if (esperado && total > esperado) { log(`Trama descartada: llegaron ${total} bytes y se esperaban ${esperado}`); chunks = []; total = 0; esperado = 0; continue; }
+    if (esperado && total === esperado) {
+      const datos = new Uint8Array(total);
+      let o = 0; for (const c of chunks) { datos.set(c, o); o += c.length; }
+      chunks = []; total = 0; esperado = 0;
+      if (tipo === "jpeg") {
+        if (datos[0] === 0xFF && datos[1] === 0xD8) nuevaImagen(datos);
+        else log("Trama JPEG descartada: no empieza por FFD8");
+      } else if (textosLogueados < 3) {
+        textosLogueados++;
+        log("Trama de texto: " + new TextDecoder().decode(datos).slice(0, 200));
+      }
+    }
+  }
+  if (activo) { activo = false; botones(); }
+}
+
+function nuevaImagen(bytes) {
+  ultimoJpeg = new Blob([bytes], { type: "image/jpeg" });
+  ultimosBytes = bytes;
+  frames++;
+  const url = URL.createObjectURL(ultimoJpeg);
+  const img = $("vista");
+  img.onload = () => { if (urlVista) URL.revokeObjectURL(urlVista); urlVista = url; };
+  img.src = url;
+  if (frames === 1) { log(`Primera imagen recibida (${bytes.length} bytes)`); botones(); }
+  estado(`Conectada · imágenes recibidas: ${frames} · fotos en la lista: ${cola.length}`);
+}
+
+function marca(f) {
+  const p = (n, l = 2) => String(n).padStart(l, "0");
+  return `${f.getFullYear()}${p(f.getMonth() + 1)}${p(f.getDate())}_${p(f.getHours())}${p(f.getMinutes())}${p(f.getSeconds())}`;
+}
+
+function aviso(m) { $("aviso").textContent = m; }
+
+// ---------- Ubicación ----------
+function posValida() { return !!pos && (Date.now() - pos.t) < 120000; }
+
+function pintarGPS() {
+  const g = $("gps");
+  if (!pos) return;
+  const edad = Math.max(0, Math.round((Date.now() - pos.t) / 1000));
+  g.className = posValida() ? "ok" : "mal";
+  g.textContent = `Ubicación: ${pos.lat.toFixed(6)}, ${pos.lon.toFixed(6)} · precisión ±${Math.round(pos.acc)} m · hace ${edad} s` +
+    (pos.acc > 30 ? " · precisión baja, mejor espera un poco" : "");
+}
+
+function iniciarGPS() {
+  if (!("geolocation" in navigator)) { $("gps").textContent = "Este navegador no tiene geolocalización."; return; }
+  if (gpsId !== null) return;
+  $("gps").className = "";
+  $("gps").textContent = "Ubicación: esperando permiso o señal GPS…";
+  gpsId = navigator.geolocation.watchPosition(p => {
+    const primera = !pos;
+    pos = { lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy,
+            alt: p.coords.altitude, t: p.timestamp };
+    if (primera) log(`Ubicación recibida: ${pos.lat.toFixed(6)}, ${pos.lon.toFixed(6)} ±${Math.round(pos.acc)} m`);
+    pintarGPS(); botones();
+  }, e => {
+    log(`Ubicación: error ${e.code} ${e.message}`);
+    $("gps").className = "mal";
+    if (e.code === 1) { $("gps").textContent = "Permiso de ubicación denegado. Actívalo en Chrome (candado junto a la dirección → Permisos) y recarga la página."; try { navigator.geolocation.clearWatch(gpsId); } catch (_) {} gpsId = null; }
+    else if (e.code === 2) $("gps").textContent = "No se puede obtener la ubicación (¿GPS apagado?). Sigo intentándolo.";
+    else $("gps").textContent = "Aún sin señal GPS. Sigo intentándolo (mejor al aire libre).";
+  }, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
+}
+
+// ---------- Escribir EXIF (con GPS) dentro del JPEG ----------
+function construirTiff(m) {
+  const TAM = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8 };
+  const p2 = n => String(n).padStart(2, "0");
+  const ascii = t => { const o = new Uint8Array(t.length + 1); for (let i = 0; i < t.length; i++) o[i] = t.charCodeAt(i) & 0x7F; return o; };
+  const u32 = n => new Uint8Array([n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255]);
+  const rats = lista => { const o = new Uint8Array(lista.length * 8); lista.forEach(([a, b], i) => { o.set(u32(a), i * 8); o.set(u32(b), i * 8 + 4); }); return o; };
+  const e = (tag, type, data) => ({ tag, type, data });
+  const fechaExif = d => `${d.getFullYear()}:${p2(d.getMonth() + 1)}:${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`;
+  const off = -m.fecha.getTimezoneOffset(), signo = off < 0 ? "-" : "+";
+  const zona = `${signo}${p2(Math.floor(Math.abs(off) / 60))}:${p2(Math.abs(off) % 60)}`;
+  const limpio = t => String(t).replace(/[^\x20-\x7E]/g, "");
+
+  const ifd0 = [
+    e(0x010E, 2, ascii(limpio(m.descripcion))),
+    e(0x010F, 2, ascii("Seeed Studio")),
+    e(0x0110, 2, ascii("SenseCAP A1101")),
+    e(0x0131, 2, ascii("captura A1101 movil (WebUSB)")),
+    e(0x0132, 2, ascii(fechaExif(m.fecha))),
+    e(0x8769, 4, u32(0)),
+  ];
+  const exif = [
+    e(0x9003, 2, ascii(fechaExif(m.fecha))),
+    e(0x9004, 2, ascii(fechaExif(m.fecha))),
+    e(0x9011, 2, ascii(zona)),
+  ];
+  let gps = null;
+  if (m.pos) {
+    const p = m.pos;
+    const dms = v => { v = Math.abs(v); const d = Math.floor(v), mf = (v - d) * 60, mi = Math.floor(mf), sg = (mf - mi) * 60; return [[d, 1], [mi, 1], [Math.round(sg * 1e6), 1e6]]; };
+    const t = new Date(p.t);
+    gps = [
+      e(0x0000, 1, new Uint8Array([2, 3, 0, 0])),
+      e(0x0001, 2, ascii(p.lat >= 0 ? "N" : "S")),
+      e(0x0002, 5, rats(dms(p.lat))),
+      e(0x0003, 2, ascii(p.lon >= 0 ? "E" : "W")),
+      e(0x0004, 5, rats(dms(p.lon))),
+      e(0x0007, 5, rats([[t.getUTCHours(), 1], [t.getUTCMinutes(), 1], [t.getUTCSeconds(), 1]])),
+      e(0x0012, 2, ascii("WGS-84")),
+      e(0x001D, 2, ascii(`${t.getUTCFullYear()}:${p2(t.getUTCMonth() + 1)}:${p2(t.getUTCDate())}`)),
+      e(0x001F, 5, rats([[Math.round(p.acc * 100), 100]])),
+    ];
+    if (p.alt !== null && p.alt !== undefined && isFinite(p.alt)) {
+      gps.push(e(0x0005, 1, new Uint8Array([p.alt < 0 ? 1 : 0])));
+      gps.push(e(0x0006, 5, rats([[Math.round(Math.abs(p.alt) * 100), 100]])));
+    }
+    ifd0.push(e(0x8825, 4, u32(0)));
+  }
+
+  const tam = lista => { let d = 0; for (const x of lista) if (x.data.length > 4) d += x.data.length + (x.data.length & 1); return 2 + 12 * lista.length + 4 + d; };
+  const escribir = (lista, base) => {
+    lista.sort((a, b) => a.tag - b.tag);
+    const out = new Uint8Array(tam(lista)), dv = new DataView(out.buffer);
+    dv.setUint16(0, lista.length, true);
+    let dataOff = 2 + 12 * lista.length + 4;
+    lista.forEach((x, i) => {
+      const o = 2 + 12 * i;
+      dv.setUint16(o, x.tag, true); dv.setUint16(o + 2, x.type, true); dv.setUint32(o + 4, x.data.length / TAM[x.type], true);
+      if (x.data.length <= 4) out.set(x.data, o + 8);
+      else { dv.setUint32(o + 8, base + dataOff, true); out.set(x.data, dataOff); dataOff += x.data.length + (x.data.length & 1); }
+    });
+    return out;
+  };
+
+  const o0 = 8, o1 = o0 + tam(ifd0), o2 = o1 + tam(exif);
+  ifd0.find(x => x.tag === 0x8769).data = u32(o1);
+  if (gps) ifd0.find(x => x.tag === 0x8825).data = u32(o2);
+  const partes = [escribir(ifd0, o0), escribir(exif, o1)];
+  if (gps) partes.push(escribir(gps, o2));
+  const total = 8 + partes.reduce((n, x) => n + x.length, 0);
+  const tiff = new Uint8Array(total);
+  tiff.set([0x49, 0x49, 0x2A, 0x00, 8, 0, 0, 0]);
+  let o = 8; for (const x of partes) { tiff.set(x, o); o += x.length; }
+  return tiff;
+}
+
+function conExif(jpg, m) {
+  if (jpg[0] !== 0xFF || jpg[1] !== 0xD8) throw new Error("no es un JPEG");
+  const tiff = construirTiff(m);
+  const lenApp1 = 2 + 6 + tiff.length;
+  if (lenApp1 > 65535) throw new Error("EXIF demasiado grande");
+  const app1 = new Uint8Array(2 + lenApp1);
+  app1.set([0xFF, 0xE1, lenApp1 >> 8, lenApp1 & 255, 0x45, 0x78, 0x69, 0x66, 0, 0]);
+  app1.set(tiff, 10);
+  let i = 2; const otros = [];
+  while (i + 4 <= jpg.length && jpg[i] === 0xFF) {
+    const mk = jpg[i + 1];
+    if (mk === 0xDA || mk === 0xD9) break;                 // empieza la imagen
+    const len = (jpg[i + 2] << 8) | jpg[i + 3];
+    const esExif = mk === 0xE1 && jpg[i + 4] === 0x45 && jpg[i + 5] === 0x78 && jpg[i + 6] === 0x69 && jpg[i + 7] === 0x66;
+    if (!esExif) otros.push(jpg.subarray(i, i + 2 + len)); // el resto de cabeceras se conservan
+    i += 2 + len;
+  }
+  const resto = jpg.subarray(i);
+  const n = 2 + app1.length + otros.reduce((a, x) => a + x.length, 0) + resto.length;
+  const out = new Uint8Array(n);
+  out.set([0xFF, 0xD8]); let o = 2;
+  out.set(app1, o); o += app1.length;
+  for (const x of otros) { out.set(x, o); o += x.length; }
+  out.set(resto, o);
+  return out;
+}
+
+// ---------- Lista de fotos ----------
+function foto() {
+  if (!ultimosBytes) { aviso("Todavía no ha llegado ninguna imagen."); return; }
+  const ahora = new Date();
+  const p = posValida() ? { ...pos } : null;
+  if (!p && !$("sinGps").checked) { aviso("Todavía no hay ubicación. Espera a que aparezca arriba, o marca «Permitir fotos sin ubicación»."); return; }
+  const cam = ($("cam").value.trim() || "CAM01").replace(/[^\w\-]+/g, "_");
+  const etq = $("etq").value.trim().replace(/[^\w\-]+/g, "_");
+  const base = `${etq ? etq + "_" : ""}${cam}_${marca(ahora)}`;
+  let nombre = base, n = 0;
+  while (usados.has(nombre)) nombre = `${base}_${++n}`;     // misma convención que agro_capture: sufijo _1, _2…
+  usados.add(nombre);
+  let bytes;
+  try { bytes = conExif(ultimosBytes, { fecha: ahora, pos: p, descripcion: `${nombre} ${cam}` }); }
+  catch (e) { log(`ERROR al escribir EXIF: ${e.message}`); aviso("No se pudo escribir la ubicación en la foto. Mira el registro."); return; }
+  const blob = new Blob([bytes], { type: "image/jpeg" });
+  cola.push({ nombre, bytes, blob, url: URL.createObjectURL(blob), pos: p, fecha: ahora, pasada: false });
+  fotos++;
+  log(`Foto en lista: ${nombre}.jpg (${bytes.length} bytes) ${p ? `${p.lat.toFixed(6)}, ${p.lon.toFixed(6)} ±${Math.round(p.acc)} m` : "SIN ubicación"}`);
+  aviso(`Añadida: ${nombre}.jpg ${p ? "con ubicación" : "SIN ubicación"} · en la lista: ${cola.length}`);
+  pintarCola(); botones();
+}
+
+function pintarCola() {
+  $("nCola").textContent = cola.length;
+  const ul = $("cola"); ul.textContent = "";
+  const ver = cola.slice(-30).reverse();
+  for (const it of ver) {
+    const li = document.createElement("li"); if (it.pasada) li.className = "ok";
+    const img = document.createElement("img"); img.src = it.url; img.alt = "";
+    const d = document.createElement("div");
+    d.textContent = `${it.nombre}.jpg · ` + (it.pos ? `${it.pos.lat.toFixed(5)}, ${it.pos.lon.toFixed(5)} ±${Math.round(it.pos.acc)} m` : "SIN ubicación") + (it.pasada === "auto" ? " · enviada al correo" : it.pasada ? " · pasada al correo" : "");
+    li.append(img, d); ul.append(li);
+  }
+  if (cola.length > ver.length) { const li = document.createElement("li"); li.textContent = `…y ${cola.length - ver.length} más antiguas`; ul.append(li); }
+}
+
+function resumen(lote) {
+  const lineas = lote.map(i => i.pos
+    ? `${i.nombre}.jpg · ${i.pos.lat.toFixed(6)}, ${i.pos.lon.toFixed(6)} (±${Math.round(i.pos.acc)} m) · https://maps.google.com/?q=${i.pos.lat.toFixed(6)},${i.pos.lon.toFixed(6)}`
+    : `${i.nombre}.jpg · sin ubicación`);
+  const cam = ($("cam").value.trim() || "CAM01");
+  return { titulo: `Fotos A1101 ${cam} ${lote[0].fecha.toLocaleDateString("es-ES")}`, texto: lineas.join("\n") };
+}
+
+// ---------- Envío automático (script de Google Apps Script) ----------
+const URL_OK = /^https:\/\/script\.google\.com\/(a\/macros\/[\w.\-]+\/|macros\/)s\/[\w\-]+\/exec$/;
+function cfgListo() { return URL_OK.test($("urlScript").value.trim()) && $("clave").value.length > 0; }
+function cfgCargar() {
+  try { $("urlScript").value = localStorage.getItem("a1101_url") || ""; $("clave").value = localStorage.getItem("a1101_clave") || ""; } catch (_) {}
+  $("cfg").open = !cfgListo();
+}
+function cfgGuardar() {
+  if (!URL_OK.test($("urlScript").value.trim())) { aviso("La dirección no parece la de un script de Google (debe empezar por https://script.google.com/ y acabar en /exec)."); return false; }
+  try { localStorage.setItem("a1101_url", $("urlScript").value.trim()); localStorage.setItem("a1101_clave", $("clave").value); aviso("Configuración guardada en este móvil."); }
+  catch (_) { aviso("No se pudo guardar en el móvil; tendrás que escribirla cada vez."); }
+  botones(); return true;
+}
+async function cfgProbar() {
+  const url = $("urlScript").value.trim();
+  if (!URL_OK.test(url)) { aviso("La dirección no parece la de un script de Google."); return; }
+  aviso("Probando conexión…");
+  try { const r = await fetch(url); const j = await r.json(); aviso(j && j.ok ? "Conexión correcta: el script responde. (La clave se comprueba al enviar.)" : "El script respondió, pero no como se esperaba."); }
+  catch (e) { aviso("No se pudo conectar con el script. Revisa la dirección y que esté publicado para «Cualquier usuario»."); log(`Prueba de conexión falló: ${e.name}: ${e.message}`); }
+}
+const aB64 = u8 => { let s = ""; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
+const MSG_ERR = { clave: "La clave no coincide con la del script.", tope_diario: "El script alcanzó su tope de correos de hoy.", ocupado: "El script estaba ocupado; vuelve a intentarlo.",
+  numero_de_fotos: "Número de fotos no válido.", demasiado_grande: "El lote es demasiado grande.", no_es_jpeg: "Una de las fotos no es JPEG.", nombre: "Nombre de archivo no válido.",
+  formato: "El script no entendió la petición.", base64: "Foto mal codificada.", interno: "Error interno del script." };
+
+async function enviarAuto() {
+  if (enviando) return;
+  const url = $("urlScript").value.trim(), clave = $("clave").value;
+  if (!URL_OK.test(url) || !clave) { aviso("Falta configurar el envío automático."); $("cfg").open = true; return; }
+  const total = cola.filter(i => !i.pasada).length;
+  if (!total) { aviso("No hay fotos pendientes."); return; }
+  enviando = true; botones();
+  let hechas = 0;
+  try {
+    while (true) {
+      const lote = cola.filter(i => !i.pasada).slice(0, LOTE_AUTO);
+      if (!lote.length) break;
+      aviso(`Enviando ${hechas + lote.length} de ${total}…`);
+      const huella = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(lote.map(i => i.nombre).join("|")))))
+        .map(b => b.toString(16).padStart(2, "0")).join("").slice(0, 32);
+      const { titulo, texto } = resumen(lote);
+      const cuerpo = JSON.stringify({ clave, lote: huella, asunto: titulo, texto, fotos: lote.map(i => ({ nombre: i.nombre + ".jpg", b64: aB64(i.bytes) })) });
+      let j;
+      try {
+        const r = await fetch(url, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: cuerpo });
+        j = await r.json();
+      } catch (e) {
+        log(`Envío falló: ${e.name}: ${e.message}`);
+        aviso(`No se pudo enviar (sin cobertura o enlace incorrecto). Enviadas ${hechas} de ${total}; el resto sigue en la lista, reinténtalo.`);
+        return;
+      }
+      if (!j || !j.ok) {
+        log(`El script rechazó el lote: ${j && j.error}`);
+        aviso(`El envío falló: ${MSG_ERR[j && j.error] || "respuesta no esperada del script"} Enviadas ${hechas} de ${total}.`);
+        return;
+      }
+      lote.forEach(i => { i.pasada = "auto"; });
+      hechas += lote.length;
+      log(`Correo enviado con ${lote.length} fotos${j.repetido ? " (el script ya lo tenía: no se duplicó)" : ""}`);
+      pintarCola();
+    }
+    aviso(`Enviadas ${hechas} fotos al correo.`);
+  } finally { enviando = false; pintarCola(); botones(); }
+}
+
+async function enviar() {
+  const pend = cola.filter(i => !i.pasada).slice(0, MAX_COMPARTIR);
+  if (!pend.length) { aviso("No hay fotos pendientes de enviar."); return; }
+  const files = pend.map(i => new File([i.bytes], i.nombre + ".jpg", { type: "image/jpeg", lastModified: i.fecha.getTime() }));
+  if (!(navigator.canShare && navigator.canShare({ files }))) {
+    aviso("Este navegador no puede compartir archivos. Usa «Guardar en el móvil» y adjúntalas a mano.");
+    log("canShare({files}) no disponible o devolvió false");
+    return;
+  }
+  const { titulo, texto } = resumen(pend);
+  try {
+    await navigator.share({ files, title: titulo, text: texto });
+    pend.forEach(i => { i.pasada = "manual"; });
+    log(`Compartidas ${pend.length} fotos (el menú se cerró sin error)`);
+    aviso(`Se pasaron ${pend.length} fotos al correo. Comprueba que has pulsado «Enviar» en la app de correo.`);
+  } catch (e) {
+    if (e.name === "AbortError") aviso("Envío cancelado. Las fotos siguen en la lista.");
+    else { aviso(`No se pudo compartir (${e.name}). Usa «Guardar en el móvil».`); log(`share falló: ${e.name}: ${e.message}`); }
+  }
+  pintarCola(); botones();
+}
+
+function guardarTodas() {
+  cola.forEach((it, k) => setTimeout(() => {
+    const a = document.createElement("a");
+    a.href = it.url; a.download = it.nombre + ".jpg";
+    document.body.appendChild(a); a.click(); a.remove();
+  }, k * 300));
+  log(`Guardando ${cola.length} fotos en Descargas`);
+  aviso(`Guardando ${cola.length} fotos en Descargas…`);
+}
+
+let vaciarArmado = null;
+function vaciar() {
+  const pend = cola.filter(i => !i.pasada).length;
+  if (pend && !vaciarArmado) {
+    $("btnVaciar").textContent = `¿Seguro? ${pend} sin enviar. Pulsa otra vez`;
+    vaciarArmado = setTimeout(() => { vaciarArmado = null; $("btnVaciar").textContent = "Vaciar lista"; }, 4000);
+    return;
+  }
+  if (vaciarArmado) { clearTimeout(vaciarArmado); vaciarArmado = null; $("btnVaciar").textContent = "Vaciar lista"; }
+  cola.forEach(i => URL.revokeObjectURL(i.url));
+  cola.length = 0;
+  log("Lista vaciada");
+  aviso("Lista vaciada.");
+  pintarCola(); botones();
+}
+
+async function cerrar() {
+  try { await disp.releaseInterface(IFACE); } catch (_) {}
+  try { await disp.close(); } catch (_) {}
+}
+async function desconectar() {
+  activo = false;
+  await cerrar();
+  try { if (wake) await wake.release(); } catch (_) {}
+  log("Desconectada");
+  estado("Desconectada.");
+  botones();
+}
+async function reiniciar() {
+  if (!activo) return;
+  log("Reiniciando flujo: orden de parada y de inicio");
+  await control(0);
+  await dormir(500);
+  await control(1);
+}
+
+$("btnConectar").onclick = conectar;
+$("btnDesconectar").onclick = desconectar;
+$("btnFoto").onclick = foto;
+$("btnGPS").onclick = iniciarGPS;
+$("btnEnviar").onclick = enviar;
+$("btnEnviarAuto").onclick = enviarAuto;
+$("btnCfgGuardar").onclick = cfgGuardar;
+$("btnCfgProbar").onclick = cfgProbar;
+$("urlScript").oninput = botones;
+$("clave").oninput = botones;
+$("btnGuardar").onclick = guardarTodas;
+$("btnVaciar").onclick = vaciar;
+$("sinGps").onchange = botones;
+$("btnReiniciar").onclick = reiniciar;
+$("btnCopiar").onclick = async () => {
+  try { await navigator.clipboard.writeText($("log").textContent); estado("Registro copiado."); }
+  catch (_) { const r = document.createRange(); r.selectNodeContents($("log")); getSelection().removeAllRanges(); getSelection().addRange(r); estado("Selecciona y copia el registro a mano."); }
+};
+
+if ("usb" in navigator) {
+  navigator.usb.addEventListener("disconnect", e => {
+    if (disp && e.device === disp) { log("La cámara se ha desconectado (evento USB)"); activo = false; botones(); estado("Cámara desconectada."); }
+  });
+}
+setInterval(() => {
+  if (!activo) return;
+  const s = Math.round((Date.now() - ultimoDato) / 1000);
+  if (s >= 5) estado(`Sin datos desde hace ${s} s. Prueba «Reiniciar flujo».`);
+}, 1000);
+
+cfgCargar();
+setInterval(() => { pintarGPS(); botones(); }, 1000);
+if (navigator.permissions && navigator.permissions.query) {
+  navigator.permissions.query({ name: "geolocation" }).then(r => { if (r.state === "granted") iniciarGPS(); }).catch(() => {});
+}
+
+log(`Página cargada. isSecureContext=${window.isSecureContext}, WebUSB=${"usb" in navigator}`);
+log(`Navegador: ${navigator.userAgent}`);
+</script>
+</body>
+</html>
