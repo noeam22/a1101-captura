@@ -35,6 +35,7 @@
   ul#cola img { width: 56px; height: 42px; object-fit: cover; border-radius: 4px; background: #000; }
   ul#cola .ok { opacity: .55; }
   h2 { font-size: 1rem; margin: 16px 0 6px; }
+  .caja-auto { margin-bottom: var(--gap); }
   details { margin-top: var(--gap); }
   pre { white-space: pre-wrap; word-break: break-word; font-size: .75rem; max-height: 260px; overflow: auto;
         background: rgba(127,127,127,.12); padding: 8px; border-radius: 8px; }
@@ -60,6 +61,11 @@
 
 <h2>Fotos hechas (<span id="nCola">0</span>)</h2>
 <ul id="cola"></ul>
+<div class="caja-auto">
+  <label class="chk" style="margin-bottom:6px"><input type="checkbox" id="autoEnv"> Enviar solo, sin pulsar, cada
+    <input type="number" id="autoN" value="10" min="1" max="25" inputmode="numeric" style="width:64px;padding:6px"> fotos</label>
+  <div id="autoAyuda" style="font-size:.8rem;opacity:.75"></div>
+</div>
 <div class="fila"><button id="btnEnviarAuto" disabled>Enviar por correo</button></div>
 <div class="fila">
   <button id="btnEnviar" disabled>Enviar con mi app de correo (manual)</button>
@@ -105,7 +111,7 @@ let disp = null, activo = false, ultimoJpeg = null, frames = 0, fotos = 0, ultim
 let urlVista = null, wake = null, textosLogueados = 0;
 let ultimosBytes = null, pos = null, gpsId = null;
 const cola = [];
-let enviando = false;
+let enviando = false, proximoIntentoAuto = 0;
 const LOTE_AUTO = 25;                               // fotos por correo automático (igual que MAX_FOTOS del script)
 const MAX_COMPARTIR = 10;                           // Chrome comparte como máximo 10 archivos de una vez
 const usados = new Set();
@@ -414,6 +420,7 @@ function foto() {
   log(`Foto en lista: ${nombre}.jpg (${bytes.length} bytes) ${p ? `${p.lat.toFixed(6)}, ${p.lon.toFixed(6)} ±${Math.round(p.acc)} m` : "SIN ubicación"}`);
   aviso(`Añadida: ${nombre}.jpg ${p ? "con ubicación" : "SIN ubicación"} · en la lista: ${cola.length}`);
   pintarCola(); botones();
+  autoDisparar();
 }
 
 function pintarCola() {
@@ -440,6 +447,19 @@ function resumen(lote) {
 
 // ---------- Envío automático (script de Google Apps Script) ----------
 const URL_OK = /^https:\/\/script\.google\.com\/(a\/macros\/[\w.\-]+\/|macros\/)s\/[\w\-]+\/exec$/;
+function autoN() { const n = parseInt($("autoN").value, 10); return Number.isFinite(n) ? Math.min(25, Math.max(1, n)) : 10; }
+function autoAyuda() {
+  const n = autoN();
+  $("autoAyuda").textContent = $("autoEnv").checked
+    ? `Se enviará un correo cada ${n} foto${n > 1 ? "s" : ""}. El script permite 40 correos al día${n < 5 ? " (con tan pocas fotos por correo se gastan rápido)" : ""}. Si no hay cobertura, reintenta cada minuto.`
+    : "Desactivado: las fotos esperan en la lista hasta que pulses «Enviar por correo».";
+}
+function autoGuardar() { try { localStorage.setItem("a1101_auto", $("autoEnv").checked ? "1" : "0"); localStorage.setItem("a1101_autoN", String(autoN())); } catch (_) {} autoAyuda(); }
+function autoCargar() { try { $("autoEnv").checked = localStorage.getItem("a1101_auto") === "1"; const n = localStorage.getItem("a1101_autoN"); if (n) $("autoN").value = n; } catch (_) {} autoAyuda(); }
+function autoDisparar() {
+  if (!$("autoEnv").checked || enviando || !cfgListo() || Date.now() < proximoIntentoAuto) return;
+  if (cola.filter(i => !i.pasada).length >= autoN()) enviarAuto();
+}
 function cfgListo() { return URL_OK.test($("urlScript").value.trim()) && $("clave").value.length > 0; }
 function cfgCargar() {
   try { $("urlScript").value = localStorage.getItem("a1101_url") || ""; $("clave").value = localStorage.getItem("a1101_clave") || ""; } catch (_) {}
@@ -465,6 +485,7 @@ const MSG_ERR = { clave: "La clave no coincide con la del script.", tope_diario:
 
 async function enviarAuto() {
   if (enviando) return;
+  proximoIntentoAuto = 0;
   const url = $("urlScript").value.trim(), clave = $("clave").value;
   if (!URL_OK.test(url) || !clave) { aviso("Falta configurar el envío automático."); $("cfg").open = true; return; }
   const total = cola.filter(i => !i.pasada).length;
@@ -486,11 +507,13 @@ async function enviarAuto() {
         j = await r.json();
       } catch (e) {
         log(`Envío falló: ${e.name}: ${e.message}`);
-        aviso(`No se pudo enviar (sin cobertura o enlace incorrecto). Enviadas ${hechas} de ${total}; el resto sigue en la lista, reinténtalo.`);
+        proximoIntentoAuto = Date.now() + 60000;
+        aviso(`No se pudo enviar (sin cobertura o enlace incorrecto). Enviadas ${hechas} de ${total}; el resto sigue en la lista${$("autoEnv").checked ? " y se reintentará en 1 minuto" : ", reinténtalo"}.`);
         return;
       }
       if (!j || !j.ok) {
         log(`El script rechazó el lote: ${j && j.error}`);
+        proximoIntentoAuto = Date.now() + 60000;
         aviso(`El envío falló: ${MSG_ERR[j && j.error] || "respuesta no esperada del script"} Enviadas ${hechas} de ${total}.`);
         return;
       }
@@ -577,6 +600,9 @@ $("btnFoto").onclick = foto;
 $("btnGPS").onclick = iniciarGPS;
 $("btnEnviar").onclick = enviar;
 $("btnEnviarAuto").onclick = enviarAuto;
+$("autoEnv").onchange = autoGuardar;
+$("autoN").onchange = autoGuardar;
+$("autoN").oninput = autoAyuda;
 $("btnCfgGuardar").onclick = cfgGuardar;
 $("btnCfgProbar").onclick = cfgProbar;
 $("urlScript").oninput = botones;
@@ -601,8 +627,8 @@ setInterval(() => {
   if (s >= 5) estado(`Sin datos desde hace ${s} s. Prueba «Reiniciar flujo».`);
 }, 1000);
 
-cfgCargar();
-setInterval(() => { pintarGPS(); botones(); }, 1000);
+cfgCargar(); autoCargar();
+setInterval(() => { pintarGPS(); botones(); autoDisparar(); }, 1000);
 if (navigator.permissions && navigator.permissions.query) {
   navigator.permissions.query({ name: "geolocation" }).then(r => { if (r.state === "granted") iniciarGPS(); }).catch(() => {});
 }
